@@ -1,4 +1,4 @@
-from scipy.integrate import odeint
+from scipy.integrate import solve_ivp
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -18,7 +18,7 @@ class System():
         self.candidates = [0] * 2 # Buffer for prev values
 
     # State Space Representation
-    def ode(self, y: list, t: float): # [theta, angular velocity]
+    def ode(self, t: float, y: list): # y=[theta, angular velocity]
         # System is time invariant, so it doesn't depend on t (timestep)
         theta, w = y
         # Update previous values if the simulation has moved on through time
@@ -38,6 +38,8 @@ class System():
         dw_dt = Fg - Fc - Ff
         return dtheta_dt, dw_dt
 
+    # PID controller shouldn't have access to any simulation variables
+    # except theta, which will be measured
     def PID(self, theta):
         w_estimate = (theta - self.prev_theta)
         # Calculate changes
@@ -46,15 +48,13 @@ class System():
         d = self.Kd*w_estimate
         return p + i + d
 
-    def simulate(self, timesteps, theta, w):
-        ys = odeint(self.ode, y0=(theta, w), t=timesteps)
-        thetas, ws = ys.T
-        return thetas, ws
+    def simulate(self, end, theta, w):
+        sol = solve_ivp(self.ode, t_span=(0, end), y0=(theta, w), method='LSODA')
+        thetas, ws = sol.y
+        return sol.t, thetas, ws
 
-ts = np.linspace(0, 5, 1000)
-sys = System(Kp=10, Ki=10, Kd=0)
-
-thetas, ws = sys.simulate(ts, theta=.1, w=.1)
+sys = System(Kp=10, Ki=0, Kd=0)
+ts, thetas, ws = sys.simulate(end=10, theta=.1, w=.1)
 
 # Plot the numerical solution
 plt.grid()
@@ -62,6 +62,3 @@ plt.plot(ts, thetas)
 plt.plot(ts, ws)
 plt.legend(('theta', 'angular velocity'))
 plt.show()
-
-# plt.hist(sys.vals)
-# plt.show()
