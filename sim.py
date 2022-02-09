@@ -47,41 +47,30 @@ class System():
         return sol.t, thetas, ws
 
     # Determine how fast the error is minimized, and whether the system is stable
-    def solve(self, w_limit=10, duration=50, window=5, atol=1e-2, pbar=False):
+    def solve(self, w_limit=10, duration=10, atol=1e-2, pbar=False, plot=False) -> float:
         dt = 0.001 # Time increment
         ts = np.arange(0, duration, dt) # Time steps
-        windows = [] # List of first windows to be considered stable for each simulation
+        tests = [] # List of first windows to be considered stable for each simulation
 
         # Initial position errors
-        y0 = np.linspace(0, np.pi, 5)
+        y0 = np.linspace(0, np.pi/3, 5)
         y0 = ProgressDisplay(y0) if pbar else y0
 
         # Cycle through various initial conditions to see how long
         # it takes for the controller to stabilize the error
         for theta in y0:
-            for w in np.linspace(0, w_limit, 5):
+            for w in np.linspace(-w_limit, w_limit, 5):
                 # Run simulation
                 thetas = self.simulate(duration, theta, w, t_eval=ts)[1]
                 # Scrolling fft to determine when the peaks die out
-                for i in np.linspace(0, duration - window):
-                    # Get slice of simulation
-                    ys = thetas[ int(i/dt) : int((i+window)/dt) ]
-                    # Fs = np.fft.fftfreq(len(ys), dt)
-                    # Get magnitude of DFT
-                    Ys = np.fft.fft(ys)
-                    Ys = np.abs(Ys)
-                    # Get frequency with the max amplitude
-                    max_i = np.argmax(Ys)
-                    # max_hz = np.abs(2*np.pi*Fs[max_i])
-                    max_amp = Ys[max_i]*10/len(ts) # ? Not sure why * 10
-                    # print(f"{max_amp:f}\t{max_hz:.3f}")
-                    if max_amp < atol:
-                        break
-                windows.append(i) # Record last window
-
-        return np.average(windows)
+                tests.append(thetas[-1] < atol and np.all(thetas < np.pi/2))
+                # If this simulation failed
+                if plot and not tests[-1]:
+                    plt.plot(ts, thetas)
+                    plt.show()
+        return sum(tests) / len(tests)
 
 if __name__ == '__main__':
-    sys = System(Kp=100, Ki=0, Kd=10, friction_coef=1, update_rate=1/100)
+    sys = System(Kp=10, Ki=0, Kd=0, friction_coef=1, update_rate=1/100)
     speed = sys.solve(pbar=True)
     print(speed)
