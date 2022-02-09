@@ -41,6 +41,10 @@ class PID():
             self.signal = self.update(theta, t)
         return self.signal # ! Add normalization
 
+    def reset(self):
+        self.prev_theta = 0
+        self.last_update = 0
+
 class Motor():
     def __init__(self, maxT: float, v_range=(0, 5), lbin=False):
         self.maxT = maxT

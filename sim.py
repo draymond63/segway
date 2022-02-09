@@ -1,7 +1,7 @@
 from scipy.integrate import solve_ivp
-from scipy.fft import fft
 import numpy as np
 import matplotlib.pyplot as plt
+from tqdm import tqdm as ProgressDisplay
 
 from controller import PID, Motor
 
@@ -34,33 +34,54 @@ class System():
         return dtheta_dt, dw_dt
 
     # PID controller shouldn't have access to any simulation variables
-    # except theta, which will be measured
+    # except theta and time, which will be measured
     def control(self, theta, t):
         signal = self.ctrl(theta, t)
         torque = self.mtr(signal, normalize=False)
         return torque
 
-    def simulate(self, end, theta, w):
-        sol = solve_ivp(self.ode, t_span=(0, end), y0=(theta, w), method='LSODA')
+    def simulate(self, duration, theta, w, **kwargs):
+        self.ctrl.reset()
+        sol = solve_ivp(self.ode, t_span=(0, duration), y0=(theta, w), method='LSODA', **kwargs)
         thetas, ws = sol.y
         return sol.t, thetas, ws
 
     # Determine how fast the error is minimized, and whether the system is stable
-    def solve(self, w_limit=10, max_duration=50, window=5):
-        dur = max_duration # ! Initially test smaller duration before testing max dur
-        for theta in np.linspace(0, np.pi):
-            for w in np.linspace(0, w_limit):
-                ts, thetas, ws = self.simulate(dur, theta, w)
-                # ! Scrolling fft to determine when the peaks die out
-                ...
+    def solve(self, w_limit=10, duration=50, window=5, atol=1e-2, pbar=False):
+        dt = 0.001 # Time increment
+        ts = np.arange(0, duration, dt) # Time steps
+        windows = [] # List of first windows to be considered stable for each simulation
+
+        # Initial position errors
+        y0 = np.linspace(0, np.pi, 5)
+        y0 = ProgressDisplay(y0) if pbar else y0
+
+        # Cycle through various initial conditions to see how long
+        # it takes for the controller to stabilize the error
+        for theta in y0:
+            for w in np.linspace(0, w_limit, 5):
+                # Run simulation
+                thetas = self.simulate(duration, theta, w, t_eval=ts)[1]
+                # Scrolling fft to determine when the peaks die out
+                for i in np.linspace(0, duration - window):
+                    # Get slice of simulation
+                    ys = thetas[ int(i/dt) : int((i+window)/dt) ]
+                    # Fs = np.fft.fftfreq(len(ys), dt)
+                    # Get magnitude of DFT
+                    Ys = np.fft.fft(ys)
+                    Ys = np.abs(Ys)
+                    # Get frequency with the max amplitude
+                    max_i = np.argmax(Ys)
+                    # max_hz = np.abs(2*np.pi*Fs[max_i])
+                    max_amp = Ys[max_i]*10/len(ts) # ? Not sure why * 10
+                    # print(f"{max_amp:f}\t{max_hz:.3f}")
+                    if max_amp < atol:
+                        break
+                windows.append(i) # Record last window
+
+        return np.average(windows)
 
 if __name__ == '__main__':
-    sys = System(Kp=5, Ki=0.1, Kd=0, update_rate=1/100)
-    ts, thetas, ws = sys.simulate(end=70, theta=.1, w=.1)
-
-    # Plot the numerical solution
-    plt.grid()
-    plt.plot(ts, thetas)
-    plt.plot(ts, ws)
-    plt.legend(('theta', 'angular velocity'))
-    plt.show()
+    sys = System(Kp=100, Ki=0, Kd=10, friction_coef=1, update_rate=1/100)
+    speed = sys.solve(pbar=True)
+    print(speed)
