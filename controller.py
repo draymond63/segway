@@ -36,7 +36,7 @@ class PID():
         return p + i + d
 
     def __call__(self, theta: float, t: float) -> float:
-        if t - self.last_update > self.Hz:
+        if t - self.last_update > 1/self.Hz:
             self.last_update = t
             self.signal = self.update(theta, t)
         return self.signal # ! Add normalization
