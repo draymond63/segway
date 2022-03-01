@@ -8,12 +8,14 @@ from tqdm import tqdm as ProgressDisplay
 from controller import PID, Motor
 
 class System():
-    def __init__(self, g=9.81, length=1, mass=1, friction_coef=0.1, mtr_args=(0.9,), **pid_args):
+    def __init__(self, g=9.81, length=1, mass=1, friction_coef=0.1, wheel_radius=0.5, mtr_args=(0.9,), **pid_args):
         # System
         self.g = g
         self.L = length
         self.m = mass
         self.k = friction_coef
+        self.r = wheel_radius
+        self.A = 1/3 # 1/12 < A < 1/3 (for moment of inertia of a rod)
         # Controller
         self.ctrl = PID(**pid_args)
         self.mtr = Motor(*mtr_args)
@@ -31,6 +33,15 @@ class System():
         Fg = a*np.sin(theta) # Gravity
         Fc = b*self.control(theta, t) # Control
         Ff = b*self.k*w # Friction
+
+        # # From equations (in intro.ipynb)
+        # a = self.g/(2*self.A*self.L)
+        # b = 1/(self.m*self.A*self.L)
+        # # Not actual forces but they are proportional to force
+        # Fg = a*np.sin(theta) # Gravity
+        # Fc = b*self.r*np.cos(theta)*self.control(theta, t) # Control
+        # Ff = b*self.k*w # Friction
+
         # dw/dt
         dw_dt = Fg - Fc - Ff
         return dtheta_dt, dw_dt
@@ -45,7 +56,7 @@ class System():
     # TODO: Ki's or slow update rates result in simulation warnings 👀
     def simulate(self, duration, theta, w, cap=False, t_eval=None, **kwargs):
         self.ctrl.reset()
-        t_eval = t_eval if t_eval else np.linspace(0, duration, 1000 * duration) 
+        t_eval = t_eval if not isinstance(t_eval, type(None)) else np.linspace(0, duration, 1000 * duration) 
         sol = solve_ivp(self.ode, t_span=(0, duration), y0=(theta, w), method='LSODA', t_eval=t_eval, **kwargs)
         # Parse args
         thetas, ws = sol.y
@@ -87,7 +98,7 @@ class System():
 def test_controller(iters=5):
     KPs = np.linspace(0, 100, iters)
     KDs = np.linspace(0, 100, iters)
-    URs = np.linspace(10, 1000, iters) # Hz
+    URs = np.linspace(50, 1000, iters) # Hz
     scores = []
 
     for Kp, Kd, update_rate in ProgressDisplay([*itertools.product(KPs, KDs, URs)]):
@@ -101,11 +112,12 @@ def test_controller(iters=5):
         })
     df = pd.DataFrame.from_dict(scores)
     print(df.sample(5))
-    df.to_csv("scores.csv", index=False)
+    df.to_csv("scores-2.csv", index=False)
 
 if __name__ == '__main__':
-    test_controller()
-    sys = System(Kp=10, Ki=0, Kd=0, update_rate=4)
-    ts, thetas, ws = sys.simulate(5, theta=1, w=-1.5, cap=True)
+    # test_controller(iters=10)
+    sys = System(Kp=10, Ki=0, Kd=0)
+    ts, thetas, ws = sys.simulate(10, theta=1, w=0, cap=False)
+    plt.grid()
     plt.plot(ts, thetas)
     plt.show()

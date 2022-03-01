@@ -1,7 +1,7 @@
 from logging import Logger
 
 class PID():
-    def __init__(self, Kp, Ki=0, Kd=0, update_rate=1/60, output_range=None):
+    def __init__(self, Kp, Ki=0, Kd=0, update_rate=60, output_range=None):
         self.Kp = Kp
         self.Ki = Ki
         self.Kd = Kd
